@@ -1,0 +1,16 @@
+var CardsText = ['a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg',
+    'a', 'b', 'c', 'dd', 'efef', 'fff', 'ggggg'
+];
