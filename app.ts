@@ -31,7 +31,7 @@ var DemoConstants =
     EvClickDebug: 104,
     EvDistributeCards: 201,
     EvShowCards: 105,
-    EvHideCards: 106,
+    EvAcquireCards: 106,
 //    EvGameMapProgress: 107,
     EvMoveTimer: 108,
 
@@ -61,6 +61,10 @@ class CardVisual extends createjs.Container{
         this.addChild(this.text)
     }
     showcard(newtext:string){
+        if (newtext==''){
+            this.hidecard()
+            return
+        }
         this.text.text = newtext
         this.visible = true
     }
@@ -71,11 +75,12 @@ class CardVisual extends createjs.Container{
 
 class CardSetVisual extends createjs.Container{
     public cardnum: number = 7;
-    private cards = [];
+    public cards = [];
     constructor(){
         super()
         for (var i=0; i<this.cardnum; ++i){
             this.cards[i]=new CardVisual()
+            this.cards[i].name=String(i)
             this.cards[i].y = i*45
             this.addChild(this.cards[i])
         }
@@ -91,6 +96,11 @@ class CardSetVisual extends createjs.Container{
     }
     showcard(i:number,s:string){
         this.getcard(i).showcard(s)
+    }
+    showcards(strings:Array<string>){
+        for (var i in strings){
+            this.showcard(parseInt(i),strings[i])
+        }
     }
 }
 
@@ -132,6 +142,12 @@ class PlayerVisual extends createjs.Container{
         this.showncards.y= 70
         this.addChild(this.showncards)
     }
+    public showcards(strings:Array<string>){
+        this.showncards.showcards(strings)
+    }
+    public setname(name:string){
+        this.playername.text = name
+    }
 }
 
 class PlayerSetVisual extends createjs.Container{
@@ -147,6 +163,13 @@ class PlayerSetVisual extends createjs.Container{
     }
     getplayervisual(Nr:number){
         return this.players[Nr]
+    }
+    setnames(Nrs,names){
+        for (var i in Nrs){
+            var Nr = Nrs[i]
+            var name = names[i]
+            this.getplayervisual(Nr).setname(name)
+        }
     }
 }
 
@@ -166,16 +189,80 @@ class ButtonVisual extends createjs.Container{
     }
 }
 
+class CardIndex {
+    private originalplace: {[ix:number]:number;} = {};
+    public deckindex: Array<number> = []
+    public editorindex: Array<number> = []
+    private editornum: number;
+    public fieldindex = {};
+    public stageindex: Array<number> = []
+    empty(){
+        for (var i=0; i<7; ++i){
+            this.deckindex[i] = -1
+            this.editorindex[i] = -1
+            this.stageindex[i] = -1
+            for (var j in this.fieldindex){
+                this.fieldindex[j][i]=-1
+            }
+        }
+        this.editornum=0
+    }
+    distribute(cardindeces: Array<number>){
+        this.empty()
+        this.deckindex = cardindeces;
+        for (var i in cardindeces){
+            this.originalplace[cardindeces[i]] = parseInt(i);
+        }
+    }
+    constructor(actorNrs:Array<number>){
+        for (var i in actorNrs){
+            var Nr = actorNrs[i]
+            this.fieldindex[Nr]=[]
+        }
+        this.empty();
+    }
+    toeditor(ix:number){
+        var cardix = this.deckindex[ix]
+        if (cardix==-1){return}
+        this.deckindex[ix]=-1
+        this.editorindex[this.editornum]=cardix
+        this.editornum += 1
+    }
+    todeck(ix:number){
+        var cardix = this.editorindex[ix]
+        if (cardix==-1){return}
+        this.editorindex[ix]=-1
+        this.editornum -= 1
+        var place = this.originalplace[cardix]
+        this.deckindex[place]=cardix
+    }
+    public toStage(){
+        var temp = this.stageindex
+        this.stageindex = this.editorindex;
+        this.editorindex = temp
+    };
+    recievefield(actorNr:number,cards:Array<number>){
+        this.fieldindex[actorNr] = cards
+        Output.log('recieved'+String(actorNr)+String(cards))
+    }
+    acquire(){
+        for (var i in this.stageindex){
+            this.stageindex[i]=-1
+            for (var Nr in this.fieldindex){
+                this.fieldindex[Nr][i]=-1
+            }
+        }
+    }
+}
+
 class Demo extends Photon.LoadBalancing.LoadBalancingClient {
 
     masterClient: MasterClient;
 
     public useGroups: boolean = false;
     public automove: boolean = false;
+    private cardIndex: CardIndex;
 
-    private deckindex: Array<number> = []
-    private editorindex: Array<number> = []
-    private fieldindex: Array<number> = []
 
     constructor(private canvas: HTMLCanvasElement) {
         super(DemoWss ? Photon.ConnectionProtocol.Wss : Photon.ConnectionProtocol.Ws, DemoAppId, DemoAppVersion);
@@ -277,39 +364,18 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
                 break
             case DemoConstants.EvDistributeCards:
                 Output.log('distribute',content)
-                this.deckindex = content
-                this.editorindex = []
-                this.fieldindex = []
+                this.cardIndex.distribute(content)
                 this.updateCard()
+                break
             case DemoConstants.EvShowCards:
-                Output.log("show ", content.cards);
-                for (var c in content.cards) {
-                    this.showCard(parseInt(c), content.cards[c]);
-                }
-                if (content.resetShown) {
-                    var demo = this;
-                    setTimeout(function () {
-                        for (var c in content.resetShown.cards) {
-                            demo.hideCard(parseInt(content.resetShown.cards[c]), true);
-                        }
-                        demo.stage.update();
-                    }, GameProperties.cardShowTimeout);
-                }
-                this.stage.update();
+                Output.log('recieved show event'+String(content))
+                this.cardIndex.recievefield(actorNr,content)
+                this.updateCard()
                 break;
-            case DemoConstants.EvHideCards:
-                Output.log("hide ", content.cards);
-                if (content.all) {
-                    for (var i = 1; i <= this.myRoom().variety * 2; ++i) {
-                        this.hideCard(i);
-                    }
-                }
-                for (var k in content.cards) {
-                    this.hideCard(content.cards[k]);
-                }
-                this.stage.update();
+            case DemoConstants.EvAcquireCards:
+                this.cardIndex.acquire();
+                this.updateCard()
                 break;
-
 
             default:
             }
@@ -337,33 +403,33 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         var t = document.getElementById("info");
         t.textContent = "Not in Game";
 
-        this.updateAutoplay(this);
+        // this.updateAutoplay(this);
     }
 
-    private autoClickTimer: number = 0;
+    // private autoClickTimer: number = 0;
 
-    updateAutoplay(client: Demo) {
-        clearInterval(this.autoClickTimer);
-        var t = <HTMLInputElement>document.getElementById("autoplay");
-        if (this.isConnectedToGame() && t.checked) {
-            this.autoClickTimer = setInterval(
-                function () {
-                    var hidden = [];
-                    var j = 0;
-                    for (var i = 1; i <= client.myRoom().variety * 2; ++i) {
-                        if (!client.shownCards[i]) {
-                            hidden[j] = i;
-                            ++j;
-                        }
-                    }
-                    if (hidden.length > 0) {
-                        var card = hidden[Math.floor(Math.random() * hidden.length)];
-                        client.raiseEventAll(DemoConstants.EvClick, { "card": card });
-                    }
-                },
-                750)
-        }
-    }
+    // updateAutoplay(client: Demo) {
+    //     clearInterval(this.autoClickTimer);
+    //     var t = <HTMLInputElement>document.getElementById("autoplay");
+    //     if (this.isConnectedToGame() && t.checked) {
+    //         this.autoClickTimer = setInterval(
+    //             function () {
+    //                 var hidden = [];
+    //                 var j = 0;
+    //                 for (var i = 1; i <= client.myRoom().variety * 2; ++i) {
+    //                     if (!client.shownCards[i]) {
+    //                         hidden[j] = i;
+    //                         ++j;
+    //                     }
+    //                 }
+    //                 if (hidden.length > 0) {
+    //                     var card = hidden[Math.floor(Math.random() * hidden.length)];
+    //                     client.raiseEventAll(DemoConstants.EvClick, { "card": card });
+    //                 }
+    //             },
+    //             750)
+    //     }
+    // }
 
     private updateMasterClientMark() {
         var el = document.getElementById("masterclientmark");
@@ -389,14 +455,14 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         this.updatePlayerOnlineList();
 
         // this.setupScene();
-        var game = this.myRoom().getCustomProperty("game");
-        for (var card = 1; card <= this.myRoom().variety * 2; ++card) {
-            // TODO: remove game.mapProgress check after empty object send bug fix
-            var icon = game.mapProgress && game.mapProgress[card];
-            if (icon) {
-                this.showCard(card, icon);
-            }
-        }
+        // var game = this.myRoom().getCustomProperty("game");
+        // for (var card = 1; card <= this.myRoom().variety * 2; ++card) {
+        //     // TODO: remove game.mapProgress check after empty object send bug fix
+        //     var icon = game.mapProgress && game.mapProgress[card];
+        //     if (icon) {
+        //         this.showCard(card, icon);
+        //     }
+        // }
         this.stage.update();
     }
 
@@ -424,14 +490,9 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
     //scene
     private stage: createjs.Stage;
 
-    private cellWidth = 96;
-    private cellHeight = 96;
-
     private bgColor = 'rgba(220,220,220,255)';
-    // private gridColor = 'rgba(180,180,180,255)';
 
     private setupScene() {
-        this.shownCards = [];
         this.stage.removeAllChildren();
         this.canvas.width = 700
         this.canvas.height = 420
@@ -443,42 +504,32 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         this.stage.update();
     }
 
-    private shownCards: createjs.Bitmap[] = [];
-
-    private hideCard(card: number, checkMap?: boolean) {
-        var game = this.myRoom().getCustomProperty("game");
-        // TODO: remove game.mapProgress check after empty object send bug fix
-        if (checkMap && game.mapProgress && game.mapProgress[card]) {
-            // leave it open
-        }
-        else {
-            if (this.shownCards[card]) {
-                this.stage.removeChild(this.shownCards[card]);
-                this.shownCards[card] = null;
-            }
-        }
+    private toEditor(place: number){
+        Output.log('toeditor'+String(place))
+        this.cardIndex.toeditor(place)
+        this.updateCard()
     }
-    private showCard(card: number, icon: number) {
-        if (!this.shownCards[card]) {
-            var img = this.myRoom().icon(icon - 1);
-            var bitmap = new createjs.Bitmap(img);
-            var col = this.myRoom().columnCount;
-            bitmap.x = ((card - 1) % col) * this.cellWidth;
-            bitmap.y = Math.floor((card - 1) / col) * this.cellHeight;
-            this.stage.addChild(bitmap);
-            this.shownCards[card] = bitmap;
-        }
+    private toDeck(place: number){
+        Output.log('todeck'+String(place))
+        this.cardIndex.todeck(place);
+        this.updateCard()
     }
     private updateCard(){
         this.mydeck.hideall()
-        var card: string;
-        for (var i=0;i<this.deckindex.length;++i){
-            card = this.myRoom().card(this.deckindex[i])
-            this.mydeck.showcard(i,card)
-        }
-        for (var i=0;i<this.editorindex.length;++i){
-            card = this.myRoom().card(this.editorindex[i])
-            this.editfield.showcard(i,card)
+        Output.log('start update cards')
+        var deckcards = this.myRoom().getcards(this.cardIndex.deckindex)
+        Output.log(String(deckcards))
+        this.mydeck.showcards(deckcards)
+        var editcards = this.myRoom().getcards(this.cardIndex.editorindex)
+        Output.log(String(editcards))
+        this.editfield.showcards(editcards)
+        var fieldindeces = this.cardIndex.fieldindex
+        for (var j in fieldindeces){
+            var Nr = parseInt(j)
+            var idx = fieldindeces[Nr]
+            var cards = this.myRoom().getcards(idx)
+            Output.log(String(cards))
+            this.players.getplayervisual(Nr).showcards(cards)
         }
         this.stage.update()
     }
@@ -498,12 +549,15 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
     private drawGrid() {
         var num = this.myRoomActorCount()
         var actors = this.myRoomActors();
+        var actornames = [];
         var actorNrs = [];
         for (var a in actors){
             if (actors[a].getParticipation()!=1){continue}
             actorNrs.push(a);
+            actornames.push(actors[a].getName())
             Output.log('actornr'+String(a))
         }
+        this.cardIndex = new CardIndex(actorNrs);
         this.mydeck = new CardSetVisual();
         this.mydeck.x = 0
         this.mydeck.y = 70
@@ -511,6 +565,7 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         this.editfield.x = 110
         this.editfield.y = 70
         this.players = new PlayerSetVisual(actorNrs);
+        this.players.setnames(actorNrs,actornames)
         this.players.x = 220
         this.players.y = 0
 
@@ -530,25 +585,31 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         this.updateCard()
     }
 
-    private ToEditor(){}
     private setupSceneUI(){
-        function funcyay(ev){
-            Output.log('show button clicked')
+        this.show_btn.addEventListener("click", (ev)=>{
+            Output.log('stagebegin')
+            this.cardIndex.toStage();
+            Output.log('stageend')
+            this.raiseEventAll(DemoConstants.EvShowCards, this.cardIndex.stageindex);
+        })
+        this.acquire_btn.addEventListener("click",(ev)=>{
+            this.raiseEventAll(DemoConstants.EvAcquireCards)
+        })
+        for (var i in this.mydeck.cards){
+            Output.log(i)
+            this.mydeck.cards[i].addEventListener("click",(ev)=>{
+                this.toEditor(parseInt(ev.target.name))
+            })
+            Output.log('b')
+            this.editfield.cards[i].addEventListener("click",(ev)=>{
+                this.toDeck(parseInt(ev.target.name))
+            })
+            Output.log('c')
         }
-        this.show_btn.addEventListener("click", funcyay)
     }
 
     // ui
     private setupUI() {
-        // this.stage.addEventListener("stagemousedown", (ev) => {
-        //     var x = Math.floor(this.stage.mouseX / this.cellWidth);
-        //     var y = Math.floor(this.stage.mouseY / this.cellHeight);
-        //     this.raiseEventAll(DemoConstants.EvClick, { "card": x + y * this.myRoom().columnCount + 1 });
-
-        //     this.stage.update();
-        // })
-        var cb = document.getElementById("autoplay");
-        cb.onchange = () => this.updateAutoplay(this);
 
         var btn = <HTMLButtonElement>document.getElementById("connectbtn");
         btn.onclick = (ev) => {
@@ -599,6 +660,7 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         }
         this.setupScene()
     }
+
     private updateRoomButtons() {
         var btn;
         var connected = this.state != Photon.LoadBalancing.LoadBalancingClient.State.Uninitialized && this.state != Photon.LoadBalancing.LoadBalancingClient.State.Disconnected
@@ -633,31 +695,39 @@ class Output {
 class DemoRoom extends Photon.LoadBalancing.Room {
     constructor(private demo: Demo, name: string) {
         super(name);
-        this.variety = GameProperties.variety;
-        this.columnCount = GameProperties.columnCount;
-        this.iconUrls = GameProperties.icons;
-        this.cardUrl = GameProperties.cardtext;
+        // this.variety = GameProperties.variety;
+        // this.columnCount = GameProperties.columnCount;
+        // this.iconUrls = GameProperties.icons;
+        // this.cardUrl = GameProperties.cardtext;
     }
 
     // acceess properties every time
-    public variety = 0;
-    public columnCount = 0;
-    public rowCount() {
-        return Math.ceil(2 * this.variety / this.columnCount)
-    }
-    public iconUrls = {};
-    public icons = {};
-    public iconUrl(i: number) {
-        return this.iconUrls[i];
-    }
-    public icon(i: number) {
-        return this.icons[i];
-    }
-    public cardUrl = '';
+    // public variety = 0;
+    // public columnCount = 0;
+    // public rowCount() {
+    //     return Math.ceil(2 * this.variety / this.columnCount)
+    // }
+    // public iconUrls = {};
+    // public icons = {};
+    // public iconUrl(i: number) {
+    //     return this.iconUrls[i];
+    // }
+    // public icon(i: number) {
+    //     return this.icons[i];
+    // }
+    // public cardUrl = '';
 
     public cards = []
     public card(i: number){
+        if (i==-1){return ''}
         return this.cards[i]
+    }
+    public getcards(indeces:Array<number>){
+        var out:Array<string> = [];
+        for (var i in indeces){
+            out[i] = this.card(indeces[i])
+        }
+        return out
     }
 
     public onPropertiesChange(changedCustomProps: any, byClient?: boolean) {
@@ -681,7 +751,7 @@ class DemoRoom extends Photon.LoadBalancing.Room {
             t.textContent = turnsLeft == 0 ? "Your turn now!" : "Wait " + turnsLeft + " turn(s)";
 
             if (game.nextPlayer == this.demo.myActor().getId()) {
-                this.demo.updateAutoplay(this.demo);
+                // this.demo.updateAutoplay(this.demo);
             }
         }
 

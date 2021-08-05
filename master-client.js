@@ -258,7 +258,7 @@ var MasterClient = /** @class */ (function () {
     MasterClient.prototype.ResetShownCards = function (click1) {
         //timer.stop(user.clickTimer)
         //this.state.clickTimer = nil
-        this.broadcast(DemoConstants.EvHideCards, { cards: [this.state.click1, this.state.click2] });
+        // this.broadcast(DemoConstants.EvHideCards, { cards: [this.state.click1, this.state.click2] })
         this.state.click1 = click1;
         this.state.click2 = null;
     };
@@ -330,7 +330,7 @@ var MasterClient = /** @class */ (function () {
         // var id = actors[actorNr].getCustomProperty("id");
         // this.logger.info("New Game request from " + id);
         var trivial = data && data.trivial;
-        this.broadcast(DemoConstants.EvHideCards, { all: true }); // hide cards
+        // this.broadcast(DemoConstants.EvHideCards, {all: true }); // hide cards
         // put participation==1 players in game
         var players = new Array();
         for (var a in actors) {
