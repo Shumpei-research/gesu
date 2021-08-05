@@ -183,8 +183,10 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
 
         // uncomment to use Custom Authentication
         // this.setCustomAuthentication("username=" + "yes" + "&token=" + "yes");
+        Output.log(String(DemoWss))
+        var addr = this.getNameServerAddress();
 
-        Output.log("Init", DemoAppId, DemoAppVersion);
+        Output.log("Init",addr, DemoAppId, DemoAppVersion);
         this.logger.info("Init", DemoAppId, DemoAppVersion);
         this.setLogLevel(DemoConstants.LogLevel);
     }

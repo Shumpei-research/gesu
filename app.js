@@ -199,7 +199,9 @@ var Demo = /** @class */ (function (_super) {
         _this.masterClient = new MasterClient(_this);
         // uncomment to use Custom Authentication
         // this.setCustomAuthentication("username=" + "yes" + "&token=" + "yes");
-        Output.log("Init", DemoAppId, DemoAppVersion);
+        Output.log(String(DemoWss));
+        var addr = _this.getNameServerAddress();
+        Output.log("Init", addr, DemoAppId, DemoAppVersion);
         _this.logger.info("Init", DemoAppId, DemoAppVersion);
         _this.setLogLevel(DemoConstants.LogLevel);
         return _this;
