@@ -49,8 +49,6 @@ var MasterClient = /** @class */ (function () {
         this.flushPropsFlag = false;
         this.game = room.getCustomProperty("game");
         this.state = room.getCustomProperty("state") || {};
-        // websocket empty object send bug workaround
-        // TODO: remove after fix
         this.state = this.state || {};
         if (this.game) {
             this.game.players = this.game.players || new Array();
@@ -60,8 +58,6 @@ var MasterClient = /** @class */ (function () {
         //
     };
     MasterClient.prototype.flushProps = function () {
-        // websocket empty object send bug workaround
-        // TODO: remove after fix
         if (this.state && Object.keys(this.state).length == 0)
             this.state = null;
         if (this.game) {
@@ -76,7 +72,6 @@ var MasterClient = /** @class */ (function () {
                     this.game.mapProgress = null;
             }
         }
-        //        
         if (this.flushPropsFlag) {
             var room = this.client.myRoom();
             room.setCustomProperty("game", this.game);
@@ -90,7 +85,7 @@ var MasterClient = /** @class */ (function () {
         this.cacheProps();
         if (!this.game) {
             this.logger.info("Creating new game...");
-            this.InitGame();
+            // this.InitGame();
         }
         // handle client's actor join same way as others
         this.onPlayerJoin(this.client.myActor());
@@ -111,12 +106,6 @@ var MasterClient = /** @class */ (function () {
         this.cacheProps();
         var room = this.client.myRoom();
         this.flushPropsFlag = false;
-        var id = actor.getCustomProperty("id");
-        this.logger.info("Next:", id, this.game.nextPlayer);
-        if (id == this.game.nextPlayer) {
-            this.ResetShownCards();
-        }
-        this.NextPlayer(0);
         this.flushProps();
     };
     MasterClient.prototype.onPlayerJoin = function (actor) {
@@ -153,7 +142,6 @@ var MasterClient = /** @class */ (function () {
             this.logger.info("Player ", id, " returned to game");
             this.GamePlayerDataUpdate(id, actorInfo);
         }
-        this.NextPlayer(0);
         this.flushPropsFlag = true;
     };
     MasterClient.prototype.onEvent = function (code, content, actorNr) {
@@ -161,9 +149,6 @@ var MasterClient = /** @class */ (function () {
             return;
         this.cacheProps();
         switch (code) {
-            case DemoConstants.EvClick:
-                this.OnMoveEvent(actorNr, code, content);
-                break;
             case DemoConstants.EvNewGame:
                 this.OnNewGameEvent(actorNr, code, content);
                 break;
@@ -178,160 +163,9 @@ var MasterClient = /** @class */ (function () {
         if (!this.isMaster())
             return;
     };
-    MasterClient.prototype.OnMoveEvent = function (actorNr, evCode, inData) {
-        this.logger.debug("OnMoveEvent");
-        var id = this.client.myRoomActors()[actorNr].getCustomProperty("id");
-        if (this.game.nextPlayer == id) {
-            var card = inData["card"];
-            if (card >= 1 && card <= GameProperties.variety * 2) {
-                if (!this.game.mapProgress[card]) {
-                    if (this.state.click1 != card) {
-                        this.game.moveCount = this.game.moveCount + 1;
-                        var icon = this.game.map[card];
-                        var tmp = {};
-                        tmp[card] = icon;
-                        var data = new Object;
-                        data["cards"] = tmp;
-                        data["match"] = false;
-                        if (this.state.click1 && this.state.click2) {
-                            this.ResetShownCards(card);
-                        }
-                        else if (this.state.click1 && this.game.map[this.state.click1] == this.game.map[card]) {
-                            data["match"] = true;
-                            this.logger.info("Match");
-                            this.game.playersData[id].hitCount = this.game.playersData[id].hitCount + 1;
-                            this.game.mapProgress[card] = icon;
-                            this.game.mapProgress[this.state.click1] = icon;
-                            //					        timer.stop(user.clickTimer)
-                            this.state.clickTimer = null;
-                            this.state.click1 = null;
-                            var tot = 0;
-                            for (var i = 1; i <= GameProperties.variety * 2; ++i) {
-                                if (this.game.mapProgress[i]) {
-                                    tot = tot + 1;
-                                }
-                            }
-                            if (tot == GameProperties.variety * 2) {
-                                this.logger.info("Game complete", tot, this.game.mapProgress);
-                                for (var ii in this.game.mapProgress) {
-                                    this.logger.info("[" + ii + "]=" + this.game.mapProgress[ii]);
-                                }
-                                this.OnGameComplete();
-                            }
-                            else {
-                                this.logger.info("Game to go", tot, GameProperties.variety * 2);
-                            }
-                            this.ResetMoveTimer(id);
-                        }
-                        else if (this.state.click1) {
-                            this.state.click2 = card;
-                            this.game.playersData[id].missCount = this.game.playersData[id].missCount + 1;
-                            data["resetShown"] = { cards: [this.state.click1, this.state.click2] };
-                            this.NextPlayer(1);
-                            //                            this.state.clickTimer = timer.create(
-                            //                                this.ResetShownCards,
-                            //                                GameProperties.cardShowTimeout
-                            //                            )
-                        }
-                        else {
-                            this.state.click1 = card;
-                        }
-                        this.broadcast(DemoConstants.EvShowCards, data);
-                        this.flushPropsFlag = true;
-                    }
-                    else {
-                        this.broadcast(DemoConstants.EvClickDebug, { msg: "Card " + card + " is shown currently" }, { targetActors: [actorNr] });
-                    }
-                }
-                else {
-                    this.broadcast(DemoConstants.EvClickDebug, { msg: "Card " + card + " already opened" }, { targetActors: [actorNr] });
-                }
-            }
-            else {
-                this.broadcast(DemoConstants.EvClickDebug, { msg: "Card " + card + " is out of range" }, { targetActors: [actorNr] });
-            }
-        }
-        else {
-            this.broadcast(DemoConstants.EvClickDebug, { msg: "Not your turn" }, { targetActors: [actorNr] });
-        }
-    };
-    MasterClient.prototype.ResetShownCards = function (click1) {
-        //timer.stop(user.clickTimer)
-        //this.state.clickTimer = nil
-        // this.broadcast(DemoConstants.EvHideCards, { cards: [this.state.click1, this.state.click2] })
-        this.state.click1 = click1;
-        this.state.click2 = null;
-    };
-    MasterClient.prototype.OnGameComplete = function () {
-        var room = this.client.myRoom();
-        var playersStats = room.getCustomProperty("playersStats") || {};
-        var playersData = this.game.playersData;
-        for (var i in this.game.players) {
-            var id = this.game.players[i];
-            this.logger.info("Updating player", id, "stats");
-            this.UpdatePlayerStats(id, playersStats, playersData);
-        }
-        room.setCustomProperty("playersStats", playersStats);
-    };
-    MasterClient.prototype.UpdatePlayerStats = function (id, playersStats, playersData) {
-        if (!playersStats[id]) {
-            playersStats[id] = {};
-        }
-        var stats = playersStats[id];
-        stats.gamesPlayed = (stats.gamesPlayed || 0) + 1;
-        stats.hitCount = (stats.hitCount || 0) + playersData[id].hitCount;
-        stats.missCount = (stats.missCount || 0) + playersData[id].missCount;
-        var data = {};
-        data["id"] = id;
-        data["gamesPlayed"] = stats.gamesPlayed;
-        data["hitCount"] = stats.hitCount;
-        data["missCount"] = stats.missCount;
-        // SavePlayer
-    };
-    MasterClient.prototype.ResetMoveTimer = function (nextPlayer) {
-        //TODO
-    };
-    MasterClient.prototype.NextPlayer = function (turns) {
-        var onlineIds = {};
-        for (var actorNr in this.client.myRoomActors()) {
-            var actor = this.client.myRoomActors()[actorNr];
-            var id = actor.getCustomProperty("id");
-            onlineIds[id] = true;
-        }
-        var players = this.game.players;
-        var count = players.length;
-        var current = 0;
-        for (var i = 0; i < players.length; ++i) {
-            if (this.game.nextPlayer == players[i]) {
-                current = i;
-                this.logger.debug("NextPlayer", "current=", current);
-                break;
-            }
-        }
-        this.game.nextPlayer = null;
-        this.game.nextPlayerList = new Array();
-        var first = true;
-        for (var i = 0; i < players.length; ++i) {
-            var ii = (current + turns + i) % count;
-            if (onlineIds[players[ii]]) {
-                if (first) {
-                    first = false;
-                    this.game.nextPlayer = players[ii];
-                }
-                this.game.nextPlayerList.push(players[ii]);
-            }
-            this.logger.info("Next Player:", this.game.nextPlayer, ", next player list:", this.game.nextPlayerList.join(","));
-            this.ResetMoveTimer(this.game.nextPlayer);
-        }
-    };
     MasterClient.prototype.OnNewGameEvent = function (actorNr, evCode, data) {
-        // this.logger.debug("OnNewGameEvent");
         var actors = this.client.myRoomActors();
-        // var id = actors[actorNr].getCustomProperty("id");
-        // this.logger.info("New Game request from " + id);
         var trivial = data && data.trivial;
-        // this.broadcast(DemoConstants.EvHideCards, {all: true }); // hide cards
-        // put participation==1 players in game
         var players = new Array();
         for (var a in actors) {
             if (actors[a].getParticipation() == 2) {
@@ -341,10 +175,20 @@ var MasterClient = /** @class */ (function () {
                 players.push(actors[a].actorNr);
             }
         }
-        this.InitGame(trivial, players);
-        // this.ResetShownCards();
+        this.InitGame(players);
     };
-    MasterClient.prototype.InitGame = function (trivial, players) {
+    MasterClient.prototype.InitGame = function (players) {
+        var acqnum = {};
+        var decknum = {};
+        for (var i in players) {
+            var Nr = players[i];
+            Output.log('player' + String(Nr));
+            acqnum[Nr] = 0;
+            decknum[Nr] = 0;
+        }
+        this.client.myRoom().setCustomProperty('acqnum', acqnum);
+        this.client.myRoom().initializeDeckSize();
+        this.client.myRoom().setCustomProperty('decknum', decknum);
         this.ShuffleCards(players);
         this.logger.info("Game Init");
         var prevPlayersData = this.game && this.game.playersData || {};
@@ -358,7 +202,6 @@ var MasterClient = /** @class */ (function () {
             this.GamePlayerDataInit(id, prevPlayersData[id]);
         }
         this.game.moveCount = 0;
-        this.NextPlayer(0);
         this.flushPropsFlag = true;
     };
     MasterClient.prototype.ShuffleCards = function (players) {

@@ -28,7 +28,7 @@ var DemoAppId = this["AppInfo"] && this["AppInfo"]["AppId"] ? this["AppInfo"]["A
 var DemoAppVersion = this["AppInfo"] && this["AppInfo"]["AppVersion"] ? this["AppInfo"]["AppVersion"] : "1.0";
 var DemoFbAppId = this["AppInfo"] && this["AppInfo"]["FbAppId"];
 var DemoConstants = {
-    EvClick: 1,
+    // EvClick: 1,
     //    EvGetMap: 2, // for debug only
     //    EvGetMapProgress: 3,
     EvNewGame: 4,
@@ -36,7 +36,7 @@ var DemoConstants = {
     EvGameStateUpdate: 101,
     EvPlayersUpdate: 102,
     EvGameMap: 103,
-    EvClickDebug: 104,
+    // EvClickDebug: 104,
     EvDistributeCards: 201,
     EvShowCards: 105,
     EvAcquireCards: 106,
@@ -53,6 +53,9 @@ var CardVisual = /** @class */ (function (_super) {
         var _this = _super.call(this) || this;
         _this.shape = new createjs.Shape();
         _this.text = new createjs.Text('', '12px Arial', 'black');
+        _this.hiddenshape = new createjs.Shape();
+        _this.hit = new createjs.Shape();
+        _this.highlight = new createjs.Shape();
         _this.shape.graphics.beginStroke('black').beginFill('white');
         _this.shape.graphics.drawRoundRect(0, 0, 100, 40, 10);
         _this.text.textAlign = 'center';
@@ -60,8 +63,18 @@ var CardVisual = /** @class */ (function (_super) {
         _this.text.maxWidth = 90;
         _this.text.x = 50;
         _this.text.y = 20;
+        _this.hiddenshape.graphics.beginStroke('rgba(50,50,50,0.5)');
+        _this.hiddenshape.graphics.drawRoundRect(0, 0, 100, 40, 10);
+        _this.hiddenshape.visible = false;
+        _this.highlight.graphics.beginFill('yellow');
+        _this.highlight.graphics.drawRoundRect(0, 0, 100, 40, 10);
+        _this.highlight.visible = false;
         _this.addChild(_this.shape);
+        _this.addChild(_this.hiddenshape);
+        _this.addChild(_this.highlight);
         _this.addChild(_this.text);
+        _this.hit.graphics.beginFill('black').drawRoundRect(0, 0, 100, 40, 10);
+        _this.hitArea = _this.hit;
         return _this;
     }
     CardVisual.prototype.showcard = function (newtext) {
@@ -70,10 +83,26 @@ var CardVisual = /** @class */ (function (_super) {
             return;
         }
         this.text.text = newtext;
-        this.visible = true;
+        this.shape.visible = true;
+        this.text.visible = true;
+        this.hiddenshape.visible = false;
+        this.highlight.visible = false;
     };
     CardVisual.prototype.hidecard = function () {
-        this.visible = false;
+        this.shape.visible = false;
+        this.text.text = '';
+        this.text.visible = false;
+        this.hiddenshape.visible = true;
+        this.highlight.visible = false;
+    };
+    CardVisual.prototype.semi_visible = function () {
+        this.hiddenshape.visible = true;
+        this.text.visible = true;
+        this.shape.visible = false;
+        this.highlight.visible = false;
+    };
+    CardVisual.prototype.selected = function () {
+        this.highlight.visible = true;
     };
     return CardVisual;
 }(createjs.Container));
@@ -100,6 +129,11 @@ var CardSetVisual = /** @class */ (function (_super) {
             this.getcard(i).hidecard();
         }
     };
+    CardSetVisual.prototype.semi_all = function () {
+        for (var i = 0; i < this.cardnum; ++i) {
+            this.getcard(i).semi_visible();
+        }
+    };
     CardSetVisual.prototype.showcard = function (i, s) {
         this.getcard(i).showcard(s);
     };
@@ -107,6 +141,9 @@ var CardSetVisual = /** @class */ (function (_super) {
         for (var i in strings) {
             this.showcard(parseInt(i), strings[i]);
         }
+    };
+    CardSetVisual.prototype.selected = function (i) {
+        this.getcard(i).selected();
     };
     return CardSetVisual;
 }(createjs.Container));
@@ -132,12 +169,42 @@ var DeckVisual = /** @class */ (function (_super) {
     };
     return DeckVisual;
 }(createjs.Container));
+var AcquiredNumberVisual = /** @class */ (function (_super) {
+    __extends(AcquiredNumberVisual, _super);
+    function AcquiredNumberVisual() {
+        var _this = _super.call(this) || this;
+        _this.description = new createjs.Text('total', '12px Arial', 'black');
+        _this.numtext = new createjs.Text('0', '20px Arial', 'black');
+        _this.shape = new createjs.Shape();
+        _this.shape.graphics.beginStroke('black');
+        _this.shape.graphics.drawRoundRect(0, 0, 60, 40, 10);
+        _this.addChild(_this.shape);
+        _this.description.textAlign = 'center';
+        _this.description.textBaseline = 'bottom';
+        _this.description.maxWidth = 50;
+        _this.description.x = 30;
+        _this.description.y = 15;
+        _this.addChild(_this.description);
+        _this.numtext.textAlign = 'center';
+        _this.numtext.textBaseline = 'bottom';
+        _this.numtext.maxWidth = 50;
+        _this.numtext.x = 30;
+        _this.numtext.y = 35;
+        _this.addChild(_this.numtext);
+        return _this;
+    }
+    AcquiredNumberVisual.prototype.setnum = function (num) {
+        this.numtext.text = String(num);
+    };
+    return AcquiredNumberVisual;
+}(createjs.Container));
 var PlayerVisual = /** @class */ (function (_super) {
     __extends(PlayerVisual, _super);
     function PlayerVisual() {
         var _this = _super.call(this) || this;
         _this.playername = new createjs.Text('name', '12px Arial', 'black');
         _this.decknum = new DeckVisual();
+        _this.acqnum = new AcquiredNumberVisual();
         _this.showncards = new CardSetVisual();
         _this.playername.textAlign = 'center';
         _this.playername.textBaseline = 'middle';
@@ -145,9 +212,12 @@ var PlayerVisual = /** @class */ (function (_super) {
         _this.playername.x = 50;
         _this.playername.y = 10;
         _this.addChild(_this.playername);
-        _this.decknum.x = 35;
+        _this.decknum.x = 5;
         _this.decknum.y = 20;
         _this.addChild(_this.decknum);
+        _this.acqnum.x = 40;
+        _this.acqnum.y = 20;
+        _this.addChild(_this.acqnum);
         _this.showncards.y = 70;
         _this.addChild(_this.showncards);
         return _this;
@@ -157,6 +227,12 @@ var PlayerVisual = /** @class */ (function (_super) {
     };
     PlayerVisual.prototype.setname = function (name) {
         this.playername.text = name;
+    };
+    PlayerVisual.prototype.setdecksize = function (num) {
+        this.decknum.setnum(num);
+    };
+    PlayerVisual.prototype.setacqnum = function (num) {
+        this.acqnum.setnum(num);
     };
     return PlayerVisual;
 }(createjs.Container));
@@ -183,6 +259,30 @@ var PlayerSetVisual = /** @class */ (function (_super) {
             this.getplayervisual(Nr).setname(name);
         }
     };
+    PlayerSetVisual.prototype.setDeckSize = function (decksize) {
+        Output.log('decksize:', String(decksize));
+        for (var Nr in decksize) {
+            Output.log('Nr:', Nr);
+            Output.log('decksizeNr:', decksize[Nr]);
+            var ply = this.getplayervisual(parseInt(Nr));
+            if (!(ply instanceof PlayerVisual)) {
+                continue;
+            }
+            Output.log('setsize:', decksize[Nr]);
+            ply.setdecksize(decksize[Nr]);
+        }
+    };
+    PlayerSetVisual.prototype.setAcqNum = function (acqsize) {
+        for (var Nr in acqsize) {
+            Output.log('Nr:', Nr);
+            Output.log('acqNr:', acqsize[Nr]);
+            var ply = this.getplayervisual(parseInt(Nr));
+            if (!(ply instanceof PlayerVisual)) {
+                return;
+            }
+            ply.setacqnum(acqsize[Nr]);
+        }
+    };
     return PlayerSetVisual;
 }(createjs.Container));
 var ButtonVisual = /** @class */ (function (_super) {
@@ -205,27 +305,27 @@ var ButtonVisual = /** @class */ (function (_super) {
 }(createjs.Container));
 var CardIndex = /** @class */ (function () {
     function CardIndex(actorNrs) {
+        this.n = 7;
         this.originalplace = {};
         this.deckindex = [];
         this.editorindex = [];
         this.fieldindex = {};
-        this.stageindex = [];
+        this.stagemode = false;
         for (var i in actorNrs) {
             var Nr = actorNrs[i];
             this.fieldindex[Nr] = [];
         }
         this.empty();
     }
+    // 0:editor 1:stage
     CardIndex.prototype.empty = function () {
-        for (var i = 0; i < 7; ++i) {
+        for (var i = 0; i < this.n; ++i) {
             this.deckindex[i] = -1;
             this.editorindex[i] = -1;
-            this.stageindex[i] = -1;
             for (var j in this.fieldindex) {
                 this.fieldindex[j][i] = -1;
             }
         }
-        this.editornum = 0;
     };
     CardIndex.prototype.distribute = function (cardindeces) {
         this.empty();
@@ -234,42 +334,75 @@ var CardIndex = /** @class */ (function () {
             this.originalplace[cardindeces[i]] = parseInt(i);
         }
     };
-    CardIndex.prototype.toeditor = function (ix) {
+    CardIndex.prototype.toeditor = function (ix, dest) {
         var cardix = this.deckindex[ix];
         if (cardix == -1) {
             return;
         }
+        var endix = this.editorindex[dest];
+        if (endix != -1) {
+            return;
+        }
         this.deckindex[ix] = -1;
-        this.editorindex[this.editornum] = cardix;
-        this.editornum += 1;
+        this.editorindex[dest] = cardix;
     };
-    CardIndex.prototype.todeck = function (ix) {
+    CardIndex.prototype.todeck = function (ix, dest) {
         var cardix = this.editorindex[ix];
         if (cardix == -1) {
             return;
         }
+        var endix = this.deckindex[dest];
+        if (endix != -1) {
+            return;
+        }
         this.editorindex[ix] = -1;
-        this.editornum -= 1;
-        var place = this.originalplace[cardix];
-        this.deckindex[place] = cardix;
+        this.deckindex[dest] = cardix;
     };
     CardIndex.prototype.toStage = function () {
-        var temp = this.stageindex;
-        this.stageindex = this.editorindex;
-        this.editorindex = temp;
+        this.stagemode = true;
     };
     ;
+    CardIndex.prototype.fromStage = function () {
+        this.stagemode = false;
+    };
     CardIndex.prototype.recievefield = function (actorNr, cards) {
         this.fieldindex[actorNr] = cards;
         Output.log('recieved' + String(actorNr) + String(cards));
     };
     CardIndex.prototype.acquire = function () {
-        for (var i in this.stageindex) {
-            this.stageindex[i] = -1;
+        for (var i in this.editorindex) {
+            this.editorindex[i] = -1;
             for (var Nr in this.fieldindex) {
                 this.fieldindex[Nr][i] = -1;
             }
         }
+        this.fromStage();
+    };
+    CardIndex.prototype.getcardnum = function () {
+        var deck = this.deckindex.filter(function (ix) { return ix != -1; });
+        if (this.stagemode) {
+            return deck.length;
+        }
+        var editor = this.editorindex.filter(function (ix) { return ix != -1; });
+        var num = deck.length + editor.length;
+        return num;
+    };
+    CardIndex.prototype.cardsinfield = function () {
+        var num = 0;
+        for (var Nr in this.fieldindex) {
+            num += this.fieldindex[Nr].filter(function (ix) { return ix != -1; }).length;
+        }
+        return num;
+    };
+    CardIndex.prototype.getstage = function () {
+        if (this.stagemode) {
+            return this.editorindex;
+        }
+        var emp = [];
+        for (var i = 0; i < this.n; ++i) {
+            emp[i] = -1;
+        }
+        return emp;
     };
     return CardIndex;
 }());
@@ -282,6 +415,8 @@ var Demo = /** @class */ (function (_super) {
         _this.automove = false;
         _this.logger = new Exitgames.Common.Logger("Demo:", DemoConstants.LogLevel);
         _this.bgColor = 'rgba(220,220,220,255)';
+        _this.selplace = 0;
+        _this.selset = 0;
         _this.masterClient = new MasterClient(_this);
         // uncomment to use Custom Authentication
         // this.setCustomAuthentication("username=" + "yes" + "&token=" + "yes");
@@ -308,7 +443,6 @@ var Demo = /** @class */ (function (_super) {
         this.stage = new createjs.Stage(this.canvas);
         this.setupUI();
         this.myRoom().loadResources(this.stage);
-        //        this.connectToRegionMaster("EU");
     };
     // overrides
     Demo.prototype.onError = function (errorCode, errorMsg) {
@@ -356,16 +490,10 @@ var Demo = /** @class */ (function (_super) {
                 Output.log("Disconnected by Master Client as already connected player");
                 this.disconnect();
                 break;
-            case DemoConstants.EvMoveTimer:
-                var t = document.getElementById("info");
-                t.textContent = "Your turn now! (" + content.timeout + " sec.)";
-                break;
-            case DemoConstants.EvClickDebug:
-                Output.log(content.msg);
-                break;
             case DemoConstants.EvDistributeCards:
                 Output.log('distribute', content);
                 this.cardIndex.distribute(content);
+                this.registerDeckSize();
                 this.updateCard();
                 break;
             case DemoConstants.EvShowCards:
@@ -395,33 +523,7 @@ var Demo = /** @class */ (function (_super) {
                 break;
         }
         this.updateRoomButtons();
-        var t = document.getElementById("info");
-        t.textContent = "Not in Game";
-        // this.updateAutoplay(this);
     };
-    // private autoClickTimer: number = 0;
-    // updateAutoplay(client: Demo) {
-    //     clearInterval(this.autoClickTimer);
-    //     var t = <HTMLInputElement>document.getElementById("autoplay");
-    //     if (this.isConnectedToGame() && t.checked) {
-    //         this.autoClickTimer = setInterval(
-    //             function () {
-    //                 var hidden = [];
-    //                 var j = 0;
-    //                 for (var i = 1; i <= client.myRoom().variety * 2; ++i) {
-    //                     if (!client.shownCards[i]) {
-    //                         hidden[j] = i;
-    //                         ++j;
-    //                     }
-    //                 }
-    //                 if (hidden.length > 0) {
-    //                     var card = hidden[Math.floor(Math.random() * hidden.length)];
-    //                     client.raiseEventAll(DemoConstants.EvClick, { "card": card });
-    //                 }
-    //             },
-    //             750)
-    //     }
-    // }
     Demo.prototype.updateMasterClientMark = function () {
         var el = document.getElementById("masterclientmark");
         el.textContent = this.masterClient.isMaster() ? "!" : "";
@@ -440,15 +542,6 @@ var Demo = /** @class */ (function (_super) {
         this.logger.info("onJoinRoom myActor", this.myActor());
         this.logger.info("onJoinRoom myRoomActors", this.myRoomActors());
         this.updatePlayerOnlineList();
-        // this.setupScene();
-        // var game = this.myRoom().getCustomProperty("game");
-        // for (var card = 1; card <= this.myRoom().variety * 2; ++card) {
-        //     // TODO: remove game.mapProgress check after empty object send bug fix
-        //     var icon = game.mapProgress && game.mapProgress[card];
-        //     if (icon) {
-        //         this.showCard(card, icon);
-        //     }
-        // }
         this.stage.update();
     };
     Demo.prototype.onActorJoin = function (actor) {
@@ -469,6 +562,10 @@ var Demo = /** @class */ (function (_super) {
         this.myRoom().setEmptyRoomLiveTime(10000);
         this.createRoomFromMy("DemoPairsGame (Master Client)");
     };
+    Demo.prototype.registerDeckSize = function () {
+        Output.log('register' + String(this.myActor().actorNr));
+        this.myRoom().registerDeckSize(this.myActor().actorNr, this.cardIndex.getcardnum());
+    };
     Demo.prototype.setupScene = function () {
         this.stage.removeAllChildren();
         this.canvas.width = 700;
@@ -477,16 +574,6 @@ var Demo = /** @class */ (function (_super) {
         this.drawGrid();
         this.setupSceneUI();
         this.stage.update();
-    };
-    Demo.prototype.toEditor = function (place) {
-        Output.log('toeditor' + String(place));
-        this.cardIndex.toeditor(place);
-        this.updateCard();
-    };
-    Demo.prototype.toDeck = function (place) {
-        Output.log('todeck' + String(place));
-        this.cardIndex.todeck(place);
-        this.updateCard();
     };
     Demo.prototype.updateCard = function () {
         this.mydeck.hideall();
@@ -497,6 +584,9 @@ var Demo = /** @class */ (function (_super) {
         var editcards = this.myRoom().getcards(this.cardIndex.editorindex);
         Output.log(String(editcards));
         this.editfield.showcards(editcards);
+        if (this.cardIndex.stagemode) {
+            this.editfield.semi_all();
+        }
         var fieldindeces = this.cardIndex.fieldindex;
         for (var j in fieldindeces) {
             var Nr = parseInt(j);
@@ -504,6 +594,21 @@ var Demo = /** @class */ (function (_super) {
             var cards = this.myRoom().getcards(idx);
             Output.log(String(cards));
             this.players.getplayervisual(Nr).showcards(cards);
+        }
+        var decksize = this.myRoom().getDecksize();
+        Output.log('decksize:', String(decksize));
+        this.players.setDeckSize(decksize);
+        var acqnum = this.myRoom().getAcqNum();
+        this.players.setAcqNum(acqnum);
+        switch (this.selset) {
+            case 0:
+                break;
+            case 1:
+                this.mydeck.selected(this.selplace);
+                break;
+            case 2:
+                this.editfield.selected(this.selplace);
+                break;
         }
         this.stage.update();
     };
@@ -513,15 +618,15 @@ var Demo = /** @class */ (function (_super) {
         this.stage.addChild(bg);
     };
     Demo.prototype.drawGrid = function () {
-        var num = this.myRoomActorCount();
         var actors = this.myRoomActors();
         var actornames = [];
         var actorNrs = [];
         for (var a in actors) {
+            Output.log('testactor' + a);
             if (actors[a].getParticipation() != 1) {
                 continue;
             }
-            actorNrs.push(a);
+            actorNrs.push(parseInt(a));
             actornames.push(actors[a].getName());
             Output.log('actornr' + String(a));
         }
@@ -539,6 +644,9 @@ var Demo = /** @class */ (function (_super) {
         this.show_btn = new ButtonVisual('show');
         this.show_btn.x = 110;
         this.show_btn.y = 395;
+        this.hide_btn = new ButtonVisual('hide');
+        this.hide_btn.x = 30;
+        this.hide_btn.y = 395;
         this.acquire_btn = new ButtonVisual('acquire');
         this.acquire_btn.x = 220;
         this.acquire_btn.y = 395;
@@ -546,30 +654,80 @@ var Demo = /** @class */ (function (_super) {
         this.stage.addChild(this.editfield);
         this.stage.addChild(this.players);
         this.stage.addChild(this.show_btn);
+        this.stage.addChild(this.hide_btn);
         this.stage.addChild(this.acquire_btn);
         this.updateCard();
+    };
+    // selset 0:nan 1:deck 2:editor
+    Demo.prototype.deckClicked = function (place) {
+        Output.log('deck' + String(place));
+        switch (this.selset) {
+            case 0:
+                this.selset = 1;
+                this.selplace = place;
+                this.updateCard();
+                break;
+            case 1:
+                this.selset = 0;
+                this.updateCard();
+                break;
+            case 2:
+                this.cardIndex.todeck(this.selplace, place);
+                this.selset = 0;
+                this.updateCard();
+                if (this.cardIndex.stagemode) {
+                    this.openCard();
+                }
+                break;
+        }
+    };
+    Demo.prototype.editorClicked = function (place) {
+        Output.log('editor' + String(place));
+        switch (this.selset) {
+            case 0:
+                this.selset = 2;
+                this.selplace = place;
+                this.updateCard();
+                break;
+            case 2:
+                this.selset = 0;
+                this.updateCard();
+                break;
+            case 1:
+                this.cardIndex.toeditor(this.selplace, place);
+                this.selset = 0;
+                this.updateCard();
+                if (this.cardIndex.stagemode) {
+                    this.openCard();
+                }
+                break;
+        }
+    };
+    Demo.prototype.openCard = function () {
+        this.registerDeckSize();
+        this.raiseEventAll(DemoConstants.EvShowCards, this.cardIndex.getstage());
     };
     Demo.prototype.setupSceneUI = function () {
         var _this = this;
         this.show_btn.addEventListener("click", function (ev) {
-            Output.log('stagebegin');
             _this.cardIndex.toStage();
-            Output.log('stageend');
-            _this.raiseEventAll(DemoConstants.EvShowCards, _this.cardIndex.stageindex);
+            _this.openCard();
+        });
+        this.hide_btn.addEventListener("click", function (ev) {
+            _this.cardIndex.fromStage();
+            _this.openCard();
         });
         this.acquire_btn.addEventListener("click", function (ev) {
+            _this.myRoom().addAcqNum(_this.myActor().actorNr, _this.cardIndex.cardsinfield());
             _this.raiseEventAll(DemoConstants.EvAcquireCards);
         });
         for (var i in this.mydeck.cards) {
-            Output.log(i);
             this.mydeck.cards[i].addEventListener("click", function (ev) {
-                _this.toEditor(parseInt(ev.target.name));
+                _this.deckClicked(parseInt(ev.target.name));
             });
-            Output.log('b');
             this.editfield.cards[i].addEventListener("click", function (ev) {
-                _this.toDeck(parseInt(ev.target.name));
+                _this.editorClicked(parseInt(ev.target.name));
             });
-            Output.log('c');
         }
     };
     // ui
@@ -611,8 +769,8 @@ var Demo = /** @class */ (function (_super) {
         for (var i in this.myRoomActors()) {
             var a = this.myRoomActors()[i];
             var item = document.createElement("li");
-            item.attributes["value"] = a.getName() + " /" + a.getId();
-            item.textContent = a.getName() + " / " + a.getId() + " / " + a.actorNr;
+            item.attributes["value"] = a.getName();
+            item.textContent = a.getName() + " / " + a.actorNr;
             if (a.isLocal) {
                 item.textContent = "-> " + item.textContent;
             }
@@ -626,9 +784,6 @@ var Demo = /** @class */ (function (_super) {
         var connected = this.state != Photon.LoadBalancing.LoadBalancingClient.State.Uninitialized && this.state != Photon.LoadBalancing.LoadBalancingClient.State.Disconnected;
         btn = document.getElementById("connectbtn");
         btn.disabled = connected;
-        btn = document.getElementById("fblogin");
-        btn.disabled = connected;
-        btn.hidden = !DemoFbAppId;
         btn = document.getElementById("disconnectbtn");
         btn.disabled = !connected;
         btn = document.getElementById("newgame");
@@ -661,27 +816,12 @@ var DemoRoom = /** @class */ (function (_super) {
     function DemoRoom(demo, name) {
         var _this = _super.call(this, name) || this;
         _this.demo = demo;
-        // acceess properties every time
-        // public variety = 0;
-        // public columnCount = 0;
-        // public rowCount() {
-        //     return Math.ceil(2 * this.variety / this.columnCount)
-        // }
-        // public iconUrls = {};
-        // public icons = {};
-        // public iconUrl(i: number) {
-        //     return this.iconUrls[i];
-        // }
-        // public icon(i: number) {
-        //     return this.icons[i];
-        // }
-        // public cardUrl = '';
         _this.cards = [];
+        var decksize = {};
+        _this.setCustomProperty('decksize', decksize);
+        var acqnum = {};
+        _this.setCustomProperty('acqnum', acqnum);
         return _this;
-        // this.variety = GameProperties.variety;
-        // this.columnCount = GameProperties.columnCount;
-        // this.iconUrls = GameProperties.icons;
-        // this.cardUrl = GameProperties.cardtext;
     }
     DemoRoom.prototype.card = function (i) {
         if (i == -1) {
@@ -696,26 +836,38 @@ var DemoRoom = /** @class */ (function (_super) {
         }
         return out;
     };
+    DemoRoom.prototype.initializeDeckSize = function () {
+        this.setCustomProperty('decksize', {});
+    };
+    DemoRoom.prototype.registerDeckSize = function (Nr, num) {
+        var decksize = this.getCustomProperty('decksize');
+        decksize[Nr] = num;
+        Output.log('registerNr' + String(Nr));
+        Output.log('registernum' + String(num));
+        this.setCustomProperty('decksize', decksize);
+    };
+    DemoRoom.prototype.getDecksize = function () {
+        return this.getCustomProperty('decksize');
+    };
+    DemoRoom.prototype.registerAcqNum = function (Nr, num) {
+        var acqnum = this.getCustomProperty('acqnum');
+        acqnum[Nr] = num;
+        this.setCustomProperty('acqnum', acqnum);
+    };
+    DemoRoom.prototype.addAcqNum = function (Nr, num) {
+        var acqnum = this.getCustomProperty('acqnum');
+        acqnum[Nr] += num;
+        this.setCustomProperty('acqnum', acqnum);
+    };
+    DemoRoom.prototype.getAcqNum = function () {
+        return this.getCustomProperty('acqnum');
+    };
     DemoRoom.prototype.onPropertiesChange = function (changedCustomProps, byClient) {
         //case DemoConstants.EvGameStateUpdate:
         if (changedCustomProps.game) {
             var game = this.getCustomProperty("game");
             var t = document.getElementById("gamestate");
             t.textContent = JSON.stringify(game);
-            t = document.getElementById("nextplayer");
-            t.textContent = "";
-            var turnsLeft = 0;
-            for (var i = 0; i < game.nextPlayerList.length; i++) {
-                if (turnsLeft == 0 && game.nextPlayerList[i] == this.demo.myActor().getId()) {
-                    turnsLeft = i;
-                }
-                t.textContent += " " + game.nextPlayerList[i];
-            }
-            var t = document.getElementById("info");
-            t.textContent = turnsLeft == 0 ? "Your turn now!" : "Wait " + turnsLeft + " turn(s)";
-            if (game.nextPlayer == this.demo.myActor().getId()) {
-                // this.demo.updateAutoplay(this.demo);
-            }
         }
         // case DemoConstants.EvPlayersUpdate:
         if (changedCustomProps.game || changedCustomProps.playersStats) {
@@ -725,8 +877,8 @@ var DemoRoom = /** @class */ (function (_super) {
             while (list.firstChild) {
                 list.removeChild(list.firstChild);
             }
-            for (var i_1 in game.players) {
-                var id = game.players[i_1];
+            for (var i in game.players) {
+                var id = game.players[i];
                 var item = document.createElement("li");
                 item.attributes["value"] = id;
                 var d = game.playersData[id];
@@ -738,18 +890,8 @@ var DemoRoom = /** @class */ (function (_super) {
         }
     };
     DemoRoom.prototype.loadResources = function (stage) {
-        Output.log('aaa');
         this.cards = CardsText;
         Output.log('cardsload' + String(this.cards.length));
-        // for (var i = 0; i < this.variety; ++i) {
-        //     var img = new Image();
-        //     this.icons[i] = img;
-        //     img.onload = function () {
-        //         Output.log("Image " + img.src + " loaded");
-        //         stage.update();
-        //     };
-        //     img.src = this.iconUrl(i);
-        // }
     };
     return DemoRoom;
 }(Photon.LoadBalancing.Room));
@@ -760,9 +902,9 @@ var DemoPlayer = /** @class */ (function (_super) {
         _this.demo = demo;
         return _this;
     }
-    DemoPlayer.prototype.getId = function () {
-        return this.getCustomProperty("id");
-    };
+    // public getId() {
+    //     return this.getCustomProperty("id");
+    // }
     DemoPlayer.prototype.getName = function () {
         return this.getCustomProperty("name");
     };
@@ -771,13 +913,13 @@ var DemoPlayer = /** @class */ (function (_super) {
     };
     DemoPlayer.prototype.onPropertiesChange = function (changedCustomProps) {
         if (this.isLocal) {
-            document.title = this.getName() + " / " + this.getId() + " Pairs Game (Master Client)";
+            document.title = this.getName() + " / " + "Surreal";
         }
         this.demo.updatePlayerOnlineList();
     };
     DemoPlayer.prototype.setInfo = function (id, name) {
-        this.demo.setUserId(id);
-        this.setCustomProperty("id", id);
+        // this.demo.setUserId(id);
+        // this.setCustomProperty("id", id);
         this.setCustomProperty("name", name);
     };
     DemoPlayer.prototype.setParticipation = function (p) {
