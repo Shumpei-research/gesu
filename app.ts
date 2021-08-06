@@ -18,28 +18,18 @@ var DemoFbAppId = this["AppInfo"] && this["AppInfo"]["FbAppId"];
 
 var DemoConstants =
 {
-    // EvClick: 1,
-//    EvGetMap: 2, // for debug only
-//    EvGetMapProgress: 3,
     EvNewGame: 4,
 
     MasterEventMax: 100, // separate events handled by master client from client events
 
-    EvGameStateUpdate: 101,
-    EvPlayersUpdate: 102,
-    EvGameMap: 103,
-    // EvClickDebug: 104,
     EvDistributeCards: 201,
     EvShowCards: 105,
     EvAcquireCards: 106,
-//    EvGameMapProgress: 107,
-    EvMoveTimer: 108,
+    EvBeginObserver: 202,
+    EvUpdatePlayers: 107,
 
     EvDisconnectOnAlreadyConnected: 151,
    
-    GameStateProp: "gameState",
-    MoveCountProp: "moveCount",
-
     LogLevel: Exitgames.Common.Logger.Level.DEBUG,
 }
 
@@ -466,7 +456,6 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
     }
 
     onEvent(code: number, content: any, actorNr: number) {
-
         this.masterClient.onEvent(code, content, actorNr);
 
         switch (code) {
@@ -476,8 +465,8 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
                 break;
             case DemoConstants.EvDistributeCards:
                 Output.log('distribute',content)
+                this.setupScene()
                 this.cardIndex.distribute(content)
-                this.registerDeckSize()
                 this.updateCard()
                 break
             case DemoConstants.EvShowCards:
@@ -489,9 +478,12 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
                 this.cardIndex.acquire();
                 this.updateCard()
                 break;
+            case DemoConstants.EvBeginObserver:
+                this.beginObserver()
+            case DemoConstants.EvUpdatePlayers:
+                this.updatePlayerOnlineList()
             default:
             }
-
         this.logger.info("Demo: onEvent", code, "content:", content, "actor:", actorNr);
     }
 
@@ -537,7 +529,8 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         this.logger.info("onJoinRoom myRoomActors", this.myRoomActors());
         this.updatePlayerOnlineList();
 
-        this.stage.update();
+        this.beginObserver()
+        // this.stage.update();
     }
 
     onActorJoin(actor: Photon.LoadBalancing.Actor) {
@@ -673,7 +666,6 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         this.stage.addChild(this.hide_btn)
         this.stage.addChild(this.acquire_btn)
 
-        this.updateCard()
     }
 
     private selplace:number=0;
@@ -748,6 +740,22 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         }
     }
 
+    private beginObserver(){
+        this.setupScene()
+        this.mydeck.visible=false
+        this.editfield.visible=false
+        this.acquire_btn.visible=false
+        this.show_btn.visible=false
+        this.hide_btn.visible=false
+        this.cardIndex.empty()
+        var fieldindex = this.myRoom().getCustomProperty('fieldcards')
+        for (var i in fieldindex){
+            var Nr = parseInt(i)
+            this.cardIndex.recievefield(Nr,fieldindex[Nr])
+        }
+        this.updateCard()
+    }
+
     // ui
     private setupUI() {
 
@@ -775,9 +783,14 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
             this.raiseEventAll(DemoConstants.EvNewGame, null);
             return false;
         }
-        btn = <HTMLButtonElement>document.getElementById("newtrivial");
+        btn = <HTMLButtonElement>document.getElementById("observer");
         btn.onclick = (ev) => {
-            this.raiseEventAll(DemoConstants.EvNewGame, { trivial: true });
+            this.myActor().setParticipation(0)
+            return false;
+        }
+        btn = <HTMLButtonElement>document.getElementById("unobserver");
+        btn.onclick = (ev) => {
+            this.myActor().setParticipation(2)
             return false;
         }
         this.updateRoomButtons();
@@ -791,14 +804,25 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
             var a = this.myRoomActors()[i];
             var item = document.createElement("li");
             item.attributes["value"] = a.getName();
-            item.textContent = a.getName() + " / " + a.actorNr;
+            var state:string;
+            switch(a.getParticipation()){
+                case 0:
+                    state='observer'
+                    break;
+                case 1:
+                    state = 'player'
+                    break;
+                case 2:
+                    state = 'waiting'
+                    break;
+            }
+            item.textContent = a.getName() + " /Number: " + a.actorNr+" / "+state;
             if (a.isLocal) {
                 item.textContent = "-> " + item.textContent;
             }
             list.appendChild(item);
             this.logger.info("actor:", a);
         }
-        this.setupScene()
     }
 
     private updateRoomButtons() {
@@ -810,9 +834,10 @@ class Demo extends Photon.LoadBalancing.LoadBalancingClient {
         btn.disabled = !connected;
         btn = document.getElementById("newgame");
         btn.disabled = !this.isJoinedToRoom()
-        btn = document.getElementById("newtrivial");
+        btn = document.getElementById("observer");
         btn.disabled = !this.isJoinedToRoom()
-
+        btn = document.getElementById("unobserver");
+        btn.disabled = !this.isJoinedToRoom()
     }
 }
 
@@ -832,10 +857,6 @@ class Output {
 class DemoRoom extends Photon.LoadBalancing.Room {
     constructor(private demo: Demo, name: string) {
         super(name);
-        var decksize:{[Nr:number]:number}={};
-        this.setCustomProperty('decksize',decksize)
-        var acqnum:{[Nr:number]:number}={};
-        this.setCustomProperty('acqnum',acqnum)
     }
 
     public cards = []
@@ -850,64 +871,48 @@ class DemoRoom extends Photon.LoadBalancing.Room {
         }
         return out
     }
-    public initializeDeckSize(){
-        this.setCustomProperty('decksize',{})
-    }
     public registerDeckSize(Nr:number,num:number){
-        var decksize = this.getCustomProperty('decksize')
+        var decksize:{[Nr:number]:number} = this.getCustomProperty('decksize') || {};
         decksize[Nr]=num
         Output.log('registerNr'+String(Nr))
         Output.log('registernum'+String(num))
         this.setCustomProperty('decksize',decksize)
     }
     public getDecksize(){
-        return this.getCustomProperty('decksize')
+        return this.getCustomProperty('decksize') || {}
     }
     public registerAcqNum(Nr:number,num:number){
-        var acqnum = this.getCustomProperty('acqnum')
+        var acqnum:{[Nr:number]:number} = this.getCustomProperty('acqnum') || {};
         acqnum[Nr]=num
         this.setCustomProperty('acqnum',acqnum)
     }
     public addAcqNum(Nr:number,num:number){
-        var acqnum = this.getCustomProperty('acqnum')
+        var acqnum:{[Nr:number]:number} = this.getCustomProperty('acqnum') || {};
         acqnum[Nr]+=num
         this.setCustomProperty('acqnum',acqnum)
     }
     public getAcqNum(){
-        return this.getCustomProperty('acqnum')
+        return this.getCustomProperty('acqnum') || {}
+    }
+    public emptyFieldCards(Nrs:Array<number>){
+        var fieldcards:{[Nr:number]:Array<number>} ={};
+        for (var i in Nrs){
+            var Nr = Nrs[i]
+            fieldcards[Nr] = []
+            for (var j=0;j<7;++j){
+                fieldcards[Nr][j] = -1
+            }
+        }
+        this.setCustomProperty('fieldcards',fieldcards)
+    }
+    public registerFieldCards(Nr:number,fieldinddex:Array<number>){
+        var fieldcards:{[Nr:number]:Array<number>} = this.getCustomProperty('fieldcards') || {};
+        fieldcards[Nr] = fieldinddex;
+        this.setCustomProperty('fieldcards',fieldcards)
     }
 
     public onPropertiesChange(changedCustomProps: any, byClient?: boolean) {
-        //case DemoConstants.EvGameStateUpdate:
-        if (changedCustomProps.game) {
-
-            var game = this.getCustomProperty("game");
-
-            var t = document.getElementById("gamestate");
-            t.textContent = JSON.stringify(game);
-        }
-
-        // case DemoConstants.EvPlayersUpdate:
-        if (changedCustomProps.game || changedCustomProps.playersStats) {
-            var game = this.getCustomProperty("game");
-            var playersStats = this.getCustomProperty("playersStats") || {};
-
-            var list = document.getElementById("players");
-            while (list.firstChild) {
-                list.removeChild(list.firstChild);
-            }
-            
-            for (let i in game.players) {
-                var id = game.players[i];
-                var item = document.createElement("li");
-                item.attributes["value"] = id;
-                var d = game.playersData[id];
-                var s = playersStats && playersStats[id];
-                // item.textContent = d.name + " / " + id + ": " + d.hitCount + " / " + (d.hitCount + d.missCount) + (s ? " [" + s.hitCount + " / " + (s.hitCount + s.missCount) + " / " + s.gamesPlayed + "]" : "");
-                // item.title = "Player id: " + id + ", name: " + d.name + "\nCurrent game: hits = " + d.hitCount + ", clicks = " + (d.hitCount + d.missCount) + (s ? "\n Totals: games played = " + s.gamesPlayed + ", hits = " + s.hitCount + ", clicks = " + (s.hitCount + s.missCount) : "");
-                list.appendChild(item);
-            }
-        }
+        this.demo.updatePlayerOnlineList();
     }
 
     public loadResources(stage: createjs.Stage) {

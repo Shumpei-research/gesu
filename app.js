@@ -28,23 +28,14 @@ var DemoAppId = this["AppInfo"] && this["AppInfo"]["AppId"] ? this["AppInfo"]["A
 var DemoAppVersion = this["AppInfo"] && this["AppInfo"]["AppVersion"] ? this["AppInfo"]["AppVersion"] : "1.0";
 var DemoFbAppId = this["AppInfo"] && this["AppInfo"]["FbAppId"];
 var DemoConstants = {
-    // EvClick: 1,
-    //    EvGetMap: 2, // for debug only
-    //    EvGetMapProgress: 3,
     EvNewGame: 4,
     MasterEventMax: 100,
-    EvGameStateUpdate: 101,
-    EvPlayersUpdate: 102,
-    EvGameMap: 103,
-    // EvClickDebug: 104,
     EvDistributeCards: 201,
     EvShowCards: 105,
     EvAcquireCards: 106,
-    //    EvGameMapProgress: 107,
-    EvMoveTimer: 108,
+    EvBeginObserver: 202,
+    EvUpdatePlayers: 107,
     EvDisconnectOnAlreadyConnected: 151,
-    GameStateProp: "gameState",
-    MoveCountProp: "moveCount",
     LogLevel: Exitgames.Common.Logger.Level.DEBUG
 };
 var CardVisual = /** @class */ (function (_super) {
@@ -492,8 +483,8 @@ var Demo = /** @class */ (function (_super) {
                 break;
             case DemoConstants.EvDistributeCards:
                 Output.log('distribute', content);
+                this.setupScene();
                 this.cardIndex.distribute(content);
-                this.registerDeckSize();
                 this.updateCard();
                 break;
             case DemoConstants.EvShowCards:
@@ -505,6 +496,10 @@ var Demo = /** @class */ (function (_super) {
                 this.cardIndex.acquire();
                 this.updateCard();
                 break;
+            case DemoConstants.EvBeginObserver:
+                this.beginObserver();
+            case DemoConstants.EvUpdatePlayers:
+                this.updatePlayerOnlineList();
             default:
         }
         this.logger.info("Demo: onEvent", code, "content:", content, "actor:", actorNr);
@@ -542,7 +537,8 @@ var Demo = /** @class */ (function (_super) {
         this.logger.info("onJoinRoom myActor", this.myActor());
         this.logger.info("onJoinRoom myRoomActors", this.myRoomActors());
         this.updatePlayerOnlineList();
-        this.stage.update();
+        this.beginObserver();
+        // this.stage.update();
     };
     Demo.prototype.onActorJoin = function (actor) {
         this.updateMasterClientMark();
@@ -656,7 +652,6 @@ var Demo = /** @class */ (function (_super) {
         this.stage.addChild(this.show_btn);
         this.stage.addChild(this.hide_btn);
         this.stage.addChild(this.acquire_btn);
-        this.updateCard();
     };
     // selset 0:nan 1:deck 2:editor
     Demo.prototype.deckClicked = function (place) {
@@ -730,6 +725,21 @@ var Demo = /** @class */ (function (_super) {
             });
         }
     };
+    Demo.prototype.beginObserver = function () {
+        this.setupScene();
+        this.mydeck.visible = false;
+        this.editfield.visible = false;
+        this.acquire_btn.visible = false;
+        this.show_btn.visible = false;
+        this.hide_btn.visible = false;
+        this.cardIndex.empty();
+        var fieldindex = this.myRoom().getCustomProperty('fieldcards');
+        for (var i in fieldindex) {
+            var Nr = parseInt(i);
+            this.cardIndex.recievefield(Nr, fieldindex[Nr]);
+        }
+        this.updateCard();
+    };
     // ui
     Demo.prototype.setupUI = function () {
         var _this = this;
@@ -754,9 +764,14 @@ var Demo = /** @class */ (function (_super) {
             _this.raiseEventAll(DemoConstants.EvNewGame, null);
             return false;
         };
-        btn = document.getElementById("newtrivial");
+        btn = document.getElementById("observer");
         btn.onclick = function (ev) {
-            _this.raiseEventAll(DemoConstants.EvNewGame, { trivial: true });
+            _this.myActor().setParticipation(0);
+            return false;
+        };
+        btn = document.getElementById("unobserver");
+        btn.onclick = function (ev) {
+            _this.myActor().setParticipation(2);
             return false;
         };
         this.updateRoomButtons();
@@ -770,14 +785,25 @@ var Demo = /** @class */ (function (_super) {
             var a = this.myRoomActors()[i];
             var item = document.createElement("li");
             item.attributes["value"] = a.getName();
-            item.textContent = a.getName() + " / " + a.actorNr;
+            var state;
+            switch (a.getParticipation()) {
+                case 0:
+                    state = 'observer';
+                    break;
+                case 1:
+                    state = 'player';
+                    break;
+                case 2:
+                    state = 'waiting';
+                    break;
+            }
+            item.textContent = a.getName() + " /Number: " + a.actorNr + " / " + state;
             if (a.isLocal) {
                 item.textContent = "-> " + item.textContent;
             }
             list.appendChild(item);
             this.logger.info("actor:", a);
         }
-        this.setupScene();
     };
     Demo.prototype.updateRoomButtons = function () {
         var btn;
@@ -788,7 +814,9 @@ var Demo = /** @class */ (function (_super) {
         btn.disabled = !connected;
         btn = document.getElementById("newgame");
         btn.disabled = !this.isJoinedToRoom();
-        btn = document.getElementById("newtrivial");
+        btn = document.getElementById("observer");
+        btn.disabled = !this.isJoinedToRoom();
+        btn = document.getElementById("unobserver");
         btn.disabled = !this.isJoinedToRoom();
     };
     return Demo;
@@ -817,10 +845,6 @@ var DemoRoom = /** @class */ (function (_super) {
         var _this = _super.call(this, name) || this;
         _this.demo = demo;
         _this.cards = [];
-        var decksize = {};
-        _this.setCustomProperty('decksize', decksize);
-        var acqnum = {};
-        _this.setCustomProperty('acqnum', acqnum);
         return _this;
     }
     DemoRoom.prototype.card = function (i) {
@@ -836,58 +860,47 @@ var DemoRoom = /** @class */ (function (_super) {
         }
         return out;
     };
-    DemoRoom.prototype.initializeDeckSize = function () {
-        this.setCustomProperty('decksize', {});
-    };
     DemoRoom.prototype.registerDeckSize = function (Nr, num) {
-        var decksize = this.getCustomProperty('decksize');
+        var decksize = this.getCustomProperty('decksize') || {};
         decksize[Nr] = num;
         Output.log('registerNr' + String(Nr));
         Output.log('registernum' + String(num));
         this.setCustomProperty('decksize', decksize);
     };
     DemoRoom.prototype.getDecksize = function () {
-        return this.getCustomProperty('decksize');
+        return this.getCustomProperty('decksize') || {};
     };
     DemoRoom.prototype.registerAcqNum = function (Nr, num) {
-        var acqnum = this.getCustomProperty('acqnum');
+        var acqnum = this.getCustomProperty('acqnum') || {};
         acqnum[Nr] = num;
         this.setCustomProperty('acqnum', acqnum);
     };
     DemoRoom.prototype.addAcqNum = function (Nr, num) {
-        var acqnum = this.getCustomProperty('acqnum');
+        var acqnum = this.getCustomProperty('acqnum') || {};
         acqnum[Nr] += num;
         this.setCustomProperty('acqnum', acqnum);
     };
     DemoRoom.prototype.getAcqNum = function () {
-        return this.getCustomProperty('acqnum');
+        return this.getCustomProperty('acqnum') || {};
+    };
+    DemoRoom.prototype.emptyFieldCards = function (Nrs) {
+        var fieldcards = {};
+        for (var i in Nrs) {
+            var Nr = Nrs[i];
+            fieldcards[Nr] = [];
+            for (var j = 0; j < 7; ++j) {
+                fieldcards[Nr][j] = -1;
+            }
+        }
+        this.setCustomProperty('fieldcards', fieldcards);
+    };
+    DemoRoom.prototype.registerFieldCards = function (Nr, fieldinddex) {
+        var fieldcards = this.getCustomProperty('fieldcards') || {};
+        fieldcards[Nr] = fieldinddex;
+        this.setCustomProperty('fieldcards', fieldcards);
     };
     DemoRoom.prototype.onPropertiesChange = function (changedCustomProps, byClient) {
-        //case DemoConstants.EvGameStateUpdate:
-        if (changedCustomProps.game) {
-            var game = this.getCustomProperty("game");
-            var t = document.getElementById("gamestate");
-            t.textContent = JSON.stringify(game);
-        }
-        // case DemoConstants.EvPlayersUpdate:
-        if (changedCustomProps.game || changedCustomProps.playersStats) {
-            var game = this.getCustomProperty("game");
-            var playersStats = this.getCustomProperty("playersStats") || {};
-            var list = document.getElementById("players");
-            while (list.firstChild) {
-                list.removeChild(list.firstChild);
-            }
-            for (var i in game.players) {
-                var id = game.players[i];
-                var item = document.createElement("li");
-                item.attributes["value"] = id;
-                var d = game.playersData[id];
-                var s = playersStats && playersStats[id];
-                // item.textContent = d.name + " / " + id + ": " + d.hitCount + " / " + (d.hitCount + d.missCount) + (s ? " [" + s.hitCount + " / " + (s.hitCount + s.missCount) + " / " + s.gamesPlayed + "]" : "");
-                // item.title = "Player id: " + id + ", name: " + d.name + "\nCurrent game: hits = " + d.hitCount + ", clicks = " + (d.hitCount + d.missCount) + (s ? "\n Totals: games played = " + s.gamesPlayed + ", hits = " + s.hitCount + ", clicks = " + (s.hitCount + s.missCount) : "");
-                list.appendChild(item);
-            }
-        }
+        this.demo.updatePlayerOnlineList();
     };
     DemoRoom.prototype.loadResources = function (stage) {
         this.cards = CardsText;
