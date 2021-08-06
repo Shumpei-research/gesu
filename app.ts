@@ -903,8 +903,8 @@ class DemoRoom extends Photon.LoadBalancing.Room {
                 item.attributes["value"] = id;
                 var d = game.playersData[id];
                 var s = playersStats && playersStats[id];
-                item.textContent = d.name + " / " + id + ": " + d.hitCount + " / " + (d.hitCount + d.missCount) + (s ? " [" + s.hitCount + " / " + (s.hitCount + s.missCount) + " / " + s.gamesPlayed + "]" : "");
-                item.title = "Player id: " + id + ", name: " + d.name + "\nCurrent game: hits = " + d.hitCount + ", clicks = " + (d.hitCount + d.missCount) + (s ? "\n Totals: games played = " + s.gamesPlayed + ", hits = " + s.hitCount + ", clicks = " + (s.hitCount + s.missCount) : "");
+                // item.textContent = d.name + " / " + id + ": " + d.hitCount + " / " + (d.hitCount + d.missCount) + (s ? " [" + s.hitCount + " / " + (s.hitCount + s.missCount) + " / " + s.gamesPlayed + "]" : "");
+                // item.title = "Player id: " + id + ", name: " + d.name + "\nCurrent game: hits = " + d.hitCount + ", clicks = " + (d.hitCount + d.missCount) + (s ? "\n Totals: games played = " + s.gamesPlayed + ", hits = " + s.hitCount + ", clicks = " + (s.hitCount + s.missCount) : "");
                 list.appendChild(item);
             }
         }
@@ -920,9 +920,9 @@ class DemoPlayer extends Photon.LoadBalancing.Actor {
     constructor(private demo: Demo, name: string, actorNr: number, isLocal: boolean) {
         super(name, actorNr, isLocal);
     }
-    // public getId() {
-    //     return this.getCustomProperty("id");
-    // }
+    public getId() {
+        return this.getCustomProperty("id");
+    }
     public getName() {
         return this.getCustomProperty("name");
     }
@@ -950,4 +950,4 @@ var loadBalancingClient;
 window.onload = () => {
   loadBalancingClient = new Demo(<HTMLCanvasElement>document.getElementById("canvas"));
     loadBalancingClient.start();
-};
+}

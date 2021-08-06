@@ -91,7 +91,7 @@ class MasterClient {
         this.cacheProps();
         if (!this.game) {
             this.logger.info("Creating new game...");
-            // this.InitGame();
+            this.InitGame();
         }
         // handle client's actor join same way as others
         this.onPlayerJoin(this.client.myActor());
@@ -125,18 +125,18 @@ class MasterClient {
         this.logger.debug("onPlayerJoin", actor.actorNr);
        
         var actorInfo = { name: actor.getCustomProperty("name") };
-        var id = actor.getCustomProperty("id");
+        var id = actor.getCustomProperty("name");
 
         var actors = this.client.myRoomActors();
-        for (var n in actors) {
-            var a = actors[n];
-            if (a.actorNr !== actor.actorNr && a.getCustomProperty("id") === id) {
-                var msg = "Player " + id + " already connected";
-                this.broadcast(DemoConstants.EvDisconnectOnAlreadyConnected, null, { targetActors: [actor.actorNr] });
-                this.logger.info("onPlayerJoin", msg);
-                return;
-            }
-        }
+        // for (var n in actors) {
+        //     var a = actors[n];
+        //     if (a.actorNr !== actor.actorNr && a.getCustomProperty("name") === id) {
+        //         var msg = "Player " + id + " already connected";
+        //         this.broadcast(DemoConstants.EvDisconnectOnAlreadyConnected, null, { targetActors: [actor.actorNr] });
+        //         this.logger.info("onPlayerJoin", msg);
+        //         return;
+        //     }
+        // }
 
         // TODO: player load
         var returning = false;
@@ -200,7 +200,7 @@ class MasterClient {
 
     private shuffled = {};
 
-    private InitGame(players: Array<number>) {
+    private InitGame(players?: Array<number>) {
         var acqnum : {[Nr:number]:number} = {};
         var decknum : {[Nr:number]:number} = {};
         for (var i in players){

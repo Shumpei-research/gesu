@@ -883,8 +883,8 @@ var DemoRoom = /** @class */ (function (_super) {
                 item.attributes["value"] = id;
                 var d = game.playersData[id];
                 var s = playersStats && playersStats[id];
-                item.textContent = d.name + " / " + id + ": " + d.hitCount + " / " + (d.hitCount + d.missCount) + (s ? " [" + s.hitCount + " / " + (s.hitCount + s.missCount) + " / " + s.gamesPlayed + "]" : "");
-                item.title = "Player id: " + id + ", name: " + d.name + "\nCurrent game: hits = " + d.hitCount + ", clicks = " + (d.hitCount + d.missCount) + (s ? "\n Totals: games played = " + s.gamesPlayed + ", hits = " + s.hitCount + ", clicks = " + (s.hitCount + s.missCount) : "");
+                // item.textContent = d.name + " / " + id + ": " + d.hitCount + " / " + (d.hitCount + d.missCount) + (s ? " [" + s.hitCount + " / " + (s.hitCount + s.missCount) + " / " + s.gamesPlayed + "]" : "");
+                // item.title = "Player id: " + id + ", name: " + d.name + "\nCurrent game: hits = " + d.hitCount + ", clicks = " + (d.hitCount + d.missCount) + (s ? "\n Totals: games played = " + s.gamesPlayed + ", hits = " + s.hitCount + ", clicks = " + (s.hitCount + s.missCount) : "");
                 list.appendChild(item);
             }
         }
@@ -902,9 +902,9 @@ var DemoPlayer = /** @class */ (function (_super) {
         _this.demo = demo;
         return _this;
     }
-    // public getId() {
-    //     return this.getCustomProperty("id");
-    // }
+    DemoPlayer.prototype.getId = function () {
+        return this.getCustomProperty("id");
+    };
     DemoPlayer.prototype.getName = function () {
         return this.getCustomProperty("name");
     };
